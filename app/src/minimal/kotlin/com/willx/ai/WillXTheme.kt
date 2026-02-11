@@ -1,5 +1,6 @@
 package com.willx.ai
 
+import android.util.Log
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import kotlin.math.floor
 import kotlin.random.Random
 
@@ -57,134 +59,50 @@ fun WillXTheme(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(
+                    if (mode == ThemeMode.MATRIX) Color.Transparent
+                    else MaterialTheme.colorScheme.background
+                )
         ) {
-            if (mode == ThemeMode.MATRIX) {
-                MatrixBackdrop()
+            // 🔴 PRIMEIRO: Conteúdo normal
+            Box(modifier = Modifier.fillMaxSize()) {
+                content()
             }
-            content()
+            
+            // 🔴 SEGUNDO: MatrixRain SOBRE o conteúdo (forçar visibilidade)
+            if (mode == ThemeMode.MATRIX) {
+                Log.d("WillXTheme", "🔥🔥🔥 MATRIX THEME ACTIVE - MATRIX RAIN OVER CONTENT 🔥🔥🔥")
+                Box(modifier = Modifier.fillMaxSize().zIndex(1f)) {
+                    MatrixRain(enabled = true)
+                }
+            } else {
+                Log.d("WillXTheme", "Theme mode: $mode (not MATRIX)")
+            }
         }
     }
 }
 
 private fun matrixColorScheme(): ColorScheme {
-    val bg = Color(0xFF001000)
-    val green = Color(0xFF00FF7A)
-    val green2 = Color(0xFF00C853)
+    val bg = Color(0xFF000000)  // Preto puro para fundo
+    val white = Color(0xFFFFFFFF)  // Branco puro para texto
+    val cyan = Color(0xFF00FFFF)   // Ciano brilhante
+    val magenta = Color(0xFFFF00FF) // Magenta vibrante
+    val yellow = Color(0xFFFFFF00)  // Amarelo para destaques
     return darkColorScheme(
-        primary = green,
-        secondary = green2,
-        tertiary = Color(0xFF1BFFB3),
+        primary = white,           // Botões principais BRANCOS
+        secondary = cyan,          // Secundário CIANO
+        tertiary = magenta,        // Terciário MAGENTA
         background = bg,
-        surface = Color(0xFF001A0A),
-        onPrimary = Color(0xFF001000),
-        onSecondary = Color(0xFF001000),
-        onBackground = Color(0xFFB9FFD9),
-        onSurface = Color(0xFFB9FFD9),
-        error = Color(0xFFFF4D4D),
-        onError = Color.Black,
+        surface = Color(0xFF1A1A1A), // Superfície mais clara
+        onPrimary = Color.Black,   // Texto em botões brancos = PRETO
+        onSecondary = Color.Black, // Texto em botões ciano = PRETO
+        onBackground = white,      // Texto no fundo = BRANCO
+        onSurface = white,         // Texto na superfície = BRANCO
+        error = Color(0xFFFF5555), // Vermelho mais suave
+        onError = Color.White,
     )
 }
 
-@Composable
-private fun MatrixBackdrop() {
-    val gradient = Brush.verticalGradient(
-        0f to Color(0xFF000A00),
-        1f to Color(0xFF001A0A),
-    )
 
-    val t = rememberInfiniteTransition(label = "matrix")
-    val scan by t.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2500, easing = LinearEasing)),
-        label = "scan"
-    )
-    val rain by t.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing)),
-        label = "rain"
-    )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(gradient)
-    ) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-            drawScanlines(scan)
-            drawRain(rain)
-        }
 
-        // subtle vignette overlay
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        0.0f to Color.Transparent,
-                        1.0f to Color(0xCC000000),
-                    )
-                )
-                .alpha(0.55f)
-        )
-    }
-}
-
-private fun DrawScope.drawScanlines(p: Float) {
-    val lineColor = Color(0x2200FF7A)
-    val step = 6f
-    var y = 0f
-    while (y < size.height) {
-        drawRect(
-            color = lineColor,
-            topLeft = Offset(0f, y),
-            size = androidx.compose.ui.geometry.Size(size.width, 1.5f)
-        )
-        y += step
-    }
-
-    val scanY = (p * size.height)
-    drawRect(
-        color = Color(0x3300FF7A),
-        topLeft = Offset(0f, scanY),
-        size = androidx.compose.ui.geometry.Size(size.width, 26f)
-    )
-}
-
-private fun DrawScope.drawRain(p: Float) {
-    val cols = 18
-    val colW = size.width / cols
-
-    val seed = Random(1337)
-    // precompute per-column speed/phase
-    val speeds = FloatArray(cols) { 0.35f + seed.nextFloat() * 1.25f }
-    val phases = FloatArray(cols) { seed.nextFloat() }
-
-    drawIntoCanvas { canvas ->
-        val paint = android.graphics.Paint().apply {
-            isAntiAlias = true
-            color = android.graphics.Color.argb(190, 0, 255, 122)
-            textSize = 18f
-            typeface = android.graphics.Typeface.MONOSPACE
-        }
-
-        for (i in 0 until cols) {
-            val x = i * colW + colW * 0.2f
-            val t = (p * speeds[i] + phases[i]) % 1f
-            val yHead = t * (size.height + 300f) - 150f
-
-            // tail
-            val tailLen = 10
-            for (k in 0 until tailLen) {
-                val y = yHead - k * 22f
-                if (y < -50f || y > size.height + 50f) continue
-                val alpha = (1f - (k / tailLen.toFloat()))
-                paint.alpha = floor(220f * alpha).toInt().coerceIn(0, 255)
-                val ch = ((33 + ((i * 7 + k * 13) % 90))).toChar().toString()
-                canvas.nativeCanvas.drawText(ch, x, y, paint)
-            }
-        }
-    }
-}

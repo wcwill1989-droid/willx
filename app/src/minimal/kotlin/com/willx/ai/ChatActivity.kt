@@ -67,6 +67,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -282,7 +285,65 @@ class ChatActivity : ComponentActivity() {
                     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
                     topBar = {
                         TopAppBar(
-                            title = { Text("WillX Chat") },
+                            title = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("WillX Chat")
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    when (themeMode) {
+                                        ThemeMode.MATRIX -> {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(
+                                                        color = Color(0xFF00FF7A).copy(alpha = 0.2f),
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    )
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    "MATRIX",
+                                                    color = Color(0xFF00FF7A),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                        ThemeMode.DARK -> {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(
+                                                        color = Color.Gray.copy(alpha = 0.2f),
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    )
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    "ESCURO",
+                                                    color = Color.Gray,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                        else -> {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(
+                                                        color = Color.Blue.copy(alpha = 0.2f),
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    )
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    "CLARO",
+                                                    color = Color.Blue,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            },
                             actions = {
                                 IconButton(onClick = {
                                     val next = when (themeMode) {
