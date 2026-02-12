@@ -121,42 +121,13 @@ fun MatrixEffect(
     }
     
     Box(modifier = modifier.fillMaxSize()) {
-        val gradient = Brush.verticalGradient(
-            0f to Color(0xFF000000),  // Preto no topo
-            0.5f to Color(0xFF001100), // Verde muito escuro no meio
-            1f to Color(0xFF002200),   // Verde um pouco mais claro embaixo
-        )
-        
         Canvas(
             modifier = Modifier.fillMaxSize(),
             onDraw = {
-                // Fundo gradiente
-                drawRect(brush = gradient, size = size)
+                // Fundo preto sólido para melhor performance
+                drawRect(color = Color.Black, size = size)
                 
-                // 🔴 RETÂNGULO VERMELHO DE DEBUG NO CENTRO
-                val centerX = size.width / 2
-                val centerY = size.height / 2
-                val debugRectSize = 100f
-                drawRect(
-                    color = Color.Red,
-                    topLeft = Offset(centerX - debugRectSize / 2, centerY - debugRectSize / 2),
-                    size = Size(debugRectSize, debugRectSize)
-                )
-                
-                // Texto de debug
-                drawIntoCanvas { canvas ->
-                    val paint = android.graphics.Paint().apply {
-                        color = android.graphics.Color.WHITE
-                        textSize = 24f
-                        isAntiAlias = true
-                    }
-                    canvas.nativeCanvas.drawText(
-                        "MATRIX DEBUG",
-                        centerX - 80f,
-                        centerY + 80f,
-                        paint
-                    )
-                }
+                // Debugging code removed for performance
                 
                 // Efeito Matrix com sistema de partículas
                 if (particleSystem == null) {

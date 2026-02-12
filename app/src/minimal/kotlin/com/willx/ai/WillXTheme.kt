@@ -60,45 +60,40 @@ fun WillXTheme(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    if (mode == ThemeMode.MATRIX) Color.Transparent
+                    if (mode == ThemeMode.MATRIX) Color.Transparent 
                     else MaterialTheme.colorScheme.background
                 )
         ) {
-            // 🔴 PRIMEIRO: Conteúdo normal
+            // Renderize a chuva Matrix no fundo se o tema estiver ativo
+            if (mode == ThemeMode.MATRIX) {
+                MatrixRain(enabled = true)
+            }
+
+            // Conteúdo principal fica por cima
             Box(modifier = Modifier.fillMaxSize()) {
                 content()
-            }
-            
-            // 🔴 SEGUNDO: MatrixRain SOBRE o conteúdo (forçar visibilidade)
-            if (mode == ThemeMode.MATRIX) {
-                Log.d("WillXTheme", "🔥🔥🔥 MATRIX THEME ACTIVE - MATRIX RAIN OVER CONTENT 🔥🔥🔥")
-                Box(modifier = Modifier.fillMaxSize().zIndex(1f)) {
-                    MatrixRain(enabled = true)
-                }
-            } else {
-                Log.d("WillXTheme", "Theme mode: $mode (not MATRIX)")
             }
         }
     }
 }
 
 private fun matrixColorScheme(): ColorScheme {
-    val bg = Color(0xFF000000)  // Preto puro para fundo
-    val white = Color(0xFFFFFFFF)  // Branco puro para texto
-    val cyan = Color(0xFF00FFFF)   // Ciano brilhante
-    val magenta = Color(0xFFFF00FF) // Magenta vibrante
-    val yellow = Color(0xFFFFFF00)  // Amarelo para destaques
+    val matrixGreen = Color(0xFF00FF41)
+    val darkBackground = Color(0xFF000000)
+    val darkSurface = Color(0xFF0D0D0D)
+    val brightWhite = Color(0xFFFFFFFF)
+
     return darkColorScheme(
-        primary = white,           // Botões principais BRANCOS
-        secondary = cyan,          // Secundário CIANO
-        tertiary = magenta,        // Terciário MAGENTA
-        background = bg,
-        surface = Color(0xFF1A1A1A), // Superfície mais clara
-        onPrimary = Color.Black,   // Texto em botões brancos = PRETO
-        onSecondary = Color.Black, // Texto em botões ciano = PRETO
-        onBackground = white,      // Texto no fundo = BRANCO
-        onSurface = white,         // Texto na superfície = BRANCO
-        error = Color(0xFFFF5555), // Vermelho mais suave
+        primary = matrixGreen,
+        secondary = Color(0xFF00A82E),
+        tertiary = Color(0xFF007F24),
+        background = darkBackground,
+        surface = darkSurface,
+        onPrimary = Color.Black,
+        onSecondary = Color.Black,
+        onBackground = brightWhite,
+        onSurface = brightWhite,
+        error = Color(0xFFFF5555),
         onError = Color.White,
     )
 }

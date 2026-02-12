@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -51,6 +53,8 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
@@ -93,6 +97,11 @@ class ChatActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Remover barra de status (status bar)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
 
         setContent {
             val themeMode by AppSettings.themeFlow(this).collectAsStateWithLifecycle(initialValue = ThemeMode.DEFAULT)
@@ -116,17 +125,65 @@ class ChatActivity : ComponentActivity() {
                 val snackbarHostState = remember { SnackbarHostState() }
 
                 val latestMessagesState by rememberUpdatedState(newValue = messages)
+                var isLoading by remember { mutableStateOf(true) }
 
-                LaunchedEffect(Unit) {
-                    val loaded = ChatHistoryStore.load(this@ChatActivity)
-                    loaded.forEach {
-                        messages.add(
-                            ChatItem(
-                                id = it.ts,
-                                role = it.role,
-                                content = it.content,
+                // Collect messages from database Flow
+                val dbMessagesFlow = remember { ChatHistoryStore.getMessagesFlow(this@ChatActivity) }
+                val dbMessages by dbMessagesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+
+                LaunchedEffect(dbMessages) {
+                    if (isLoading) {
+                        // First load: populate messages from database
+                        messages.clear()
+                        dbMessages.forEach {
+                            messages.add(
+                                ChatItem(
+                                    id = it.ts,
+                                    role = it.role,
+                                    content = it.content,
+                                )
                             )
-                        )
+                        }
+                        isLoading = false
+                    } else {
+                        // Subsequent updates: sync with database (except for pending messages)
+                        // We need to preserve pending messages that aren't in database yet
+                        val currentPendingIds = messages.filter { it.pending }.map { it.id }.toSet()
+                        val dbMessageIds = dbMessages.map { it.ts }.toSet()
+                        
+                        // Remove messages that are in our list but not in database (except pending)
+                        messages.removeAll { !it.pending && it.id !in dbMessageIds }
+                        
+                        // Add or update messages from database
+                        dbMessages.forEach { dbMsg ->
+                            val existingIdx = messages.indexOfFirst { it.id == dbMsg.ts }
+                            if (existingIdx >= 0) {
+                                // Update existing message
+                                val existing = messages[existingIdx]
+                                if (!existing.pending) { // Don't overwrite pending messages
+                                    messages[existingIdx] = ChatItem(
+                                        id = dbMsg.ts,
+                                        role = dbMsg.role,
+                                        content = dbMsg.content,
+                                        pending = false
+                                    )
+                                }
+                            } else {
+                                // Add new message from database
+                                messages.add(
+                                    ChatItem(
+                                        id = dbMsg.ts,
+                                        role = dbMsg.role,
+                                        content = dbMsg.content,
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Auto-scroll to bottom when messages update
+                    if (messages.isNotEmpty()) {
+                        runCatching { listState.animateScrollToItem(messages.size - 1) }
                     }
                 }
 
@@ -136,7 +193,7 @@ class ChatActivity : ComponentActivity() {
                     }
                 }
 
-                fun persist() {
+                suspend fun persist() {
                     val copy = messages.map {
                         ChatHistoryStore.Message(
                             role = it.role,
@@ -144,9 +201,7 @@ class ChatActivity : ComponentActivity() {
                             ts = it.id, // Usar o ID como timestamp (já é timestamp)
                         )
                     }
-                    scope.launch(Dispatchers.IO) {
-                        ChatHistoryStore.save(this@ChatActivity, copy)
-                    }
+                    ChatHistoryStore.save(this@ChatActivity, copy)
                 }
 
                 val filePicker = rememberLauncherForActivityResult(
@@ -173,7 +228,9 @@ class ChatActivity : ComponentActivity() {
 
                     val pendingId = now + 1
                     messages.add(ChatItem(id = pendingId, role = "assistant", content = "", pending = true))
-                    persist()
+                    scope.launch {
+                        persist()
+                    }
 
                     isStreaming = true
                     stage = Stage.OPENROUTER
@@ -203,7 +260,9 @@ class ChatActivity : ComponentActivity() {
                                             messages[idx] = cur.copy(pending = false)
                                         }
                                         status = ""
-                                        persist()
+                                        scope.launch {
+                                            persist()
+                                        }
                                     }
                                     .onFailure { e ->
                                         val errorMessage = "Erro: ${e.message ?: e.javaClass.simpleName}"
@@ -282,6 +341,8 @@ class ChatActivity : ComponentActivity() {
                 }
 
                 Scaffold(
+                    containerColor = if (themeMode == ThemeMode.MATRIX) Color.Transparent else MaterialTheme.colorScheme.background,
+                    contentWindowInsets = WindowInsets.ime,
                     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
                     topBar = {
                         TopAppBar(
@@ -361,7 +422,7 @@ class ChatActivity : ComponentActivity() {
                                     messages.clear()
                                     attachmentUri = null
                                     attachmentText = null
-                                    scope.launch(Dispatchers.IO) {
+                                    scope.launch {
                                         ChatHistoryStore.clear(this@ChatActivity)
                                     }
                                 }) {
@@ -380,8 +441,7 @@ class ChatActivity : ComponentActivity() {
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
-                            .padding(12.dp)
-                            .imePadding(),
+                            .padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
@@ -486,44 +546,63 @@ class ChatActivity : ComponentActivity() {
                         }
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    when (themeMode) {
+                                        ThemeMode.MATRIX -> Color(0xFF001E0C).copy(alpha = 0.6f)
+                                        ThemeMode.DARK -> MaterialTheme.colorScheme.surfaceVariant
+                                        else -> MaterialTheme.colorScheme.surface
+                                    },
+                                    RoundedCornerShape(24.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Button(onClick = { filePicker.launch(arrayOf("text/*")) }) {
-                                Text(if (attachmentUri == null) "Arquivo" else "Arquivo OK")
+                            // Botão de anexar arquivo
+                            IconButton(
+                                onClick = { filePicker.launch(arrayOf("text/*")) },
+                                modifier = Modifier
+                                    .background(
+                                        if (attachmentUri != null) {
+                                            when (themeMode) {
+                                                ThemeMode.MATRIX -> Color(0xFF00FF7A).copy(alpha = 0.2f)
+                                                else -> MaterialTheme.colorScheme.primaryContainer
+                                            }
+                                        } else Color.Transparent,
+                                        RoundedCornerShape(12.dp)
+                                    )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AttachFile,
+                                    contentDescription = "Anexar arquivo",
+                                    tint = if (attachmentUri != null) {
+                                        when (themeMode) {
+                                            ThemeMode.MATRIX -> Color(0xFF00FF7A)
+                                            else -> MaterialTheme.colorScheme.primary
+                                        }
+                                    } else {
+                                        when (themeMode) {
+                                            ThemeMode.MATRIX -> Color(0xFFB9FFD9).copy(alpha = 0.6f)
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    }
+                                )
                             }
 
-                            if (isStreaming) {
-                                Button(onClick = {
-                                    activeCall?.cancel()
-                                    activeCall = null
-                                    isStreaming = false
-                                    stage = Stage.NONE
-                                    status = "Cancelado"
-                                }) {
-                                    Text(if (stage == Stage.DEEPSEARCH) "Parar busca" else "Parar")
-                                }
-                            }
+                            // Campo de texto
                             OutlinedTextField(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .background(
-                                        when (themeMode) {
-                                            ThemeMode.MATRIX -> Color(0xFF001E0C).copy(alpha = 0.8f)
-                                            ThemeMode.DARK -> MaterialTheme.colorScheme.surfaceVariant
-                                            else -> MaterialTheme.colorScheme.surface
-                                        },
-                                        MaterialTheme.shapes.medium
-                                    ),
+                                    .weight(1f),
                                 value = input,
                                 onValueChange = { input = it },
-                                label = { 
+                                placeholder = { 
                                     Text(
                                         "Digite sua mensagem...", 
                                         color = when (themeMode) {
-                                            ThemeMode.MATRIX -> Color(0xFFB9FFD9).copy(alpha = 0.7f)
-                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            ThemeMode.MATRIX -> Color(0xFFB9FFD9).copy(alpha = 0.5f)
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                         }
                                     ) 
                                 },
@@ -540,18 +619,72 @@ class ChatActivity : ComponentActivity() {
                                         ThemeMode.MATRIX -> Color(0xFF00FF7A)
                                         else -> MaterialTheme.colorScheme.primary
                                     },
-                                    unfocusedBorderColor = when (themeMode) {
-                                        ThemeMode.MATRIX -> Color(0xFF003A18)
-                                        else -> MaterialTheme.colorScheme.outline
-                                    },
-                                    focusedLabelColor = when (themeMode) {
-                                        ThemeMode.MATRIX -> Color(0xFF00FF7A)
-                                        else -> MaterialTheme.colorScheme.primary
-                                    }
-                                )
+                                    unfocusedBorderColor = Color.Transparent,
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                ),
+                                shape = RoundedCornerShape(16.dp)
                             )
-                            Button(onClick = { send() }) {
-                                Text("Enviar")
+
+                            // Botão de parar/enviar
+                            if (isStreaming) {
+                                IconButton(
+                                    onClick = {
+                                        activeCall?.cancel()
+                                        activeCall = null
+                                        isStreaming = false
+                                        stage = Stage.NONE
+                                        status = "Cancelado"
+                                    },
+                                    modifier = Modifier
+                                        .background(
+                                            when (themeMode) {
+                                                ThemeMode.MATRIX -> Color(0xFFFF0000).copy(alpha = 0.2f)
+                                                else -> MaterialTheme.colorScheme.errorContainer
+                                            },
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Stop,
+                                        contentDescription = "Parar",
+                                        tint = when (themeMode) {
+                                            ThemeMode.MATRIX -> Color(0xFFFF4444)
+                                            else -> MaterialTheme.colorScheme.error
+                                        }
+                                    )
+                                }
+                            } else {
+                                IconButton(
+                                    onClick = { send() },
+                                    enabled = input.trim().isNotEmpty(),
+                                    modifier = Modifier
+                                        .background(
+                                            if (input.trim().isNotEmpty()) {
+                                                when (themeMode) {
+                                                    ThemeMode.MATRIX -> Color(0xFF00FF7A).copy(alpha = 0.3f)
+                                                    else -> MaterialTheme.colorScheme.primaryContainer
+                                                }
+                                            } else Color.Transparent,
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Send,
+                                        contentDescription = "Enviar",
+                                        tint = if (input.trim().isNotEmpty()) {
+                                            when (themeMode) {
+                                                ThemeMode.MATRIX -> Color(0xFF00FF7A)
+                                                else -> MaterialTheme.colorScheme.primary
+                                            }
+                                        } else {
+                                            when (themeMode) {
+                                                ThemeMode.MATRIX -> Color(0xFFB9FFD9).copy(alpha = 0.3f)
+                                                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -570,16 +703,17 @@ private fun ChatBubble(
 ) {
     val isUser = role == "user"
     val bg = when {
-        matrix && isUser -> Color(0xFF003A18)
-        matrix && !isUser -> Color(0xFF001E0C)
+        matrix && isUser -> Color(0xFF0A2818)  // Verde escuro mais sólido para usuário
+        matrix && !isUser -> Color(0xFF0D0D0D) // Preto quase puro para IA
         isUser -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
     val fg = when {
-        matrix -> Color(0xFFB9FFD9)
+        matrix && isUser -> Color(0xFFE0FFE0)  // Verde claro quase branco para usuário
+        matrix && !isUser -> Color(0xFF00FF41) // Verde Matrix brilhante para IA
         else -> MaterialTheme.colorScheme.onSurface
     }
-    val glow = if (matrix) Color(0xFF00FF7A) else Color.Transparent
+    val glow = if (matrix) Color(0xFF00FF41) else Color.Transparent
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -588,7 +722,7 @@ private fun ChatBubble(
         Box(
             modifier = Modifier
                 .shadow(
-                    elevation = if (matrix) 14.dp else 2.dp,
+                    elevation = if (matrix) 8.dp else 2.dp,
                     shape = MaterialTheme.shapes.large,
                     ambientColor = glow,
                     spotColor = glow,
@@ -597,15 +731,17 @@ private fun ChatBubble(
             Column(
                 modifier = Modifier
                     .background(bg, MaterialTheme.shapes.large)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
                     .widthIn(max = 320.dp)
             ) {
                 Text(
                     text = if (isUser) "Você" else "AI",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = fg.copy(alpha = 0.8f),
+                    color = fg.copy(alpha = 0.9f),
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 if (pending) {
@@ -613,7 +749,9 @@ private fun ChatBubble(
                 } else {
                     Text(
                         text = text,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontWeight = if (matrix) FontWeight.Medium else FontWeight.Normal
+                        ),
                         color = fg,
                     )
                 }

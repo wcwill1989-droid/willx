@@ -1,3 +1,4 @@
+# Android Studio
 *.iml
 .gradle
 /local.properties
@@ -7,9 +8,52 @@
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+/.idea/misc.xml
+/.idea/gradle.xml
+/.idea/runConfigurations/
+/.idea/shelf/
+/.idea/vcs.xml
 .DS_Store
-/build
-/captures
+
+# Build
+/build/
+/app/build/
+/captures/
+
+# Local configuration
+local.properties
+*.properties
+
+# External native build
 .externalNativeBuild
 .cxx
-local.properties
+
+# Gradle
+.gradle/
+gradle-app.setting
+
+# Kotlin
+.kotlin/
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Backup files
+*.bak
+*.backup

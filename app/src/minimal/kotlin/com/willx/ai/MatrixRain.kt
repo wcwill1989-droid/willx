@@ -115,9 +115,9 @@ fun MatrixRain(
                 // Calcular colunas
                 columns = floor(width / charWidth).toInt()
                 
-                // 🔴 FUNDO MATRIX - Verde SEMI-TRANSPARENTE sobre conteúdo
+                // Fundo Matrix muito sutil para não interferir na leitura
                 drawRect(
-                    color = Color(0x88006600), // Verde claro 50% transparente
+                    color = Color(0x11001100), // Verde muito transparente (apenas 6% de opacidade)
                     size = size
                 )
                 

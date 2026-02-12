@@ -1,56 +1,49 @@
 package com.willx.ai
 
 import android.content.Context
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.File
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 
 object ChatHistoryStore {
     private const val FILE_NAME = "chat_history.json"
 
+    @Entity(tableName = "messages")
     data class Message(
+        @PrimaryKey(autoGenerate = true) val id: Long = 0,
         val role: String,
         val content: String,
         val ts: Long,
     )
 
-    fun load(context: Context): List<Message> {
-        val file = File(context.filesDir, FILE_NAME)
-        if (!file.exists()) return emptyList()
-        val text = runCatching { file.readText() }.getOrNull() ?: return emptyList()
-        return runCatching {
-            val arr = JSONArray(text)
-            buildList {
-                for (i in 0 until arr.length()) {
-                    val o = arr.getJSONObject(i)
-                    add(
-                        Message(
-                            role = o.optString("role"),
-                            content = o.optString("content"),
-                            ts = o.optLong("ts"),
-                        )
-                    )
-                }
-            }
-        }.getOrDefault(emptyList())
-    }
+    // Room database implementation
+    private var db: AppDatabase? = null
 
-    fun save(context: Context, messages: List<Message>) {
-        val file = File(context.filesDir, FILE_NAME)
-        val arr = JSONArray()
-        for (m in messages) {
-            arr.put(
-                JSONObject()
-                    .put("role", m.role)
-                    .put("content", m.content)
-                    .put("ts", m.ts)
-            )
+    private fun ensureDatabaseInitialized(context: Context) {
+        if (db == null) {
+            AppDatabase.init(context)
+            db = AppDatabase.getInstance()
         }
-        file.writeText(arr.toString())
     }
 
-    fun clear(context: Context) {
-        val file = File(context.filesDir, FILE_NAME)
-        if (file.exists()) file.delete()
+    fun getMessagesFlow(context: Context): Flow<List<Message>> {
+        ensureDatabaseInitialized(context)
+        return db!!.messageDao().getAllMessages()
+    }
+
+    suspend fun save(context: Context, messages: List<Message>) {
+        ensureDatabaseInitialized(context)
+        withContext(Dispatchers.IO) {
+            db!!.messageDao().insertMessages(messages)
+        }
+    }
+
+    suspend fun clear(context: Context) {
+        ensureDatabaseInitialized(context)
+        withContext(Dispatchers.IO) {
+            db!!.messageDao().deleteAllMessages()
+        }
     }
 }
